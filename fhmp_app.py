@@ -292,9 +292,9 @@ elif st.session_state.mode == "new":
     
         for i, l in enumerate(LANDFORM):
             if i < 5:
-            form["landform"][l] = col1.checkbox(l, value=form["landform"][l])
-        else:
-            form["landform"][l] = col2.checkbox(l, value=form["landform"][l])
+                form["landform"][l] = col1.checkbox(l, value=form["landform"][l])
+            else:
+                form["landform"][l] = col2.checkbox(l, value=form["landform"][l])
 
 
     elif step == 4:
