@@ -286,9 +286,16 @@ elif st.session_state.mode == "new":
             form["dominant_other"] = st.text_input("Other (Dominant species)", value=form["dominant_other"])
 
     elif step == 3:
-        st.subheader("Landform morphology")
-        for l in LANDFORM:
-            form["landform"][l] = st.checkbox(l, value=form["landform"][l])
+    st.subheader("Landform morphology")
+    
+    col1, col2 = st.columns(2)
+    
+    for i, l in enumerate(LANDFORM):
+        if i < 5:
+            form["landform"][l] = col1.checkbox(l, value=form["landform"][l])
+        else:
+            form["landform"][l] = col2.checkbox(l, value=form["landform"][l])
+
 
     elif step == 4:
         st.subheader("Water features")
