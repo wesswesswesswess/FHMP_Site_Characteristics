@@ -287,14 +287,21 @@ elif st.session_state.mode == "new":
 
     elif step == 3:
         st.subheader("Landform morphology")
-    
-        col1, col2 = st.columns(2)
-    
-        for i, l in enumerate(LANDFORM):
-            if i < 5:
-                form["landform"][l] = col1.checkbox(l, value=form["landform"][l])
-            else:
-                form["landform"][l] = col2.checkbox(l, value=form["landform"][l])
+
+        # Split into two groups
+        left_items = LANDFORM[:5]
+        right_items = LANDFORM[5:]
+
+        # Create two columns using HTML and Streamlit widgets
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            for l in left_items:
+                form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"left_{l}")
+
+        with col2:
+            for l in right_items:
+                form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"right_{l}")
 
 
     elif step == 4:
