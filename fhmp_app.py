@@ -288,20 +288,27 @@ elif st.session_state.mode == "new":
     elif step == 3:
         st.subheader("Landform morphology")
 
-        # Split into two groups
-        left_items = LANDFORM[:5]
-        right_items = LANDFORM[5:]
+        # Inject CSS for grid layout
+        st.markdown("""
+        <style>
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-        # Create two columns using HTML and Streamlit widgets
-        col1, col2 = st.columns([1, 1])
+        # Start grid container
+        st.markdown('<div class="checkbox-grid">', unsafe_allow_html=True)
 
-        with col1:
-            for l in left_items:
-                form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"left_{l}")
+        # Render checkboxes inside the grid
+        for l in LANDFORM:
+            form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=l)
 
-        with col2:
-            for l in right_items:
-                form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"right_{l}")
+        # Close grid container
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
 
     elif step == 4:
