@@ -288,28 +288,16 @@ elif st.session_state.mode == "new":
     elif step == 3:
         st.subheader("Landform morphology")
 
-        # Inject CSS for grid layout
-        st.markdown("""
-        <style>
-        .checkbox-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # Split into two columns
+        col1, col2 = st.columns(2)
 
-        # Start grid container
-        st.markdown('<div class="checkbox-grid">', unsafe_allow_html=True)
-
-        # Render checkboxes inside the grid
-        for l in LANDFORM:
-            form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=l)
-
-        # Close grid container
-        st.markdown('</div>', unsafe_allow_html=True)
-
-
+        for i, l in enumerate(LANDFORM):
+            if i < 5:
+                with col1:
+                    form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"left_{l}")
+            else:
+                with col2:
+                    form["landform"][l] = st.checkbox(l, value=form["landform"][l], key=f"right_{l}")
 
     elif step == 4:
         st.subheader("Water features")
