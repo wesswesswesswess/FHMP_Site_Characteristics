@@ -80,6 +80,17 @@ def init_session():
         st.session_state.step = 0
     if "form" not in st.session_state:
         st.session_state.form = default_form()
+    
+# --- new: delete confirmations ---
+    if "confirm_delete" not in st.session_state:
+        st.session_state.confirm_delete = False          # single record delete pending?
+    if "confirm_rec" not in st.session_state:
+        st.session_state.confirm_rec = None              # holds the selected record dict (with _idx)
+    if "confirm_delete_all" not in st.session_state:
+        st.session_state.confirm_delete_all = False      # bulk delete pending?
+    if "confirm_delete_all_text" not in st.session_state:
+        st.session_state.confirm_delete_all_text = ""    # user must type DELETE
+
 
 def default_form():
     return {
@@ -400,21 +411,66 @@ if st.session_state.mode == "splash":
 elif st.session_state.mode == "view":
     st.subheader("Previous records")
 
-    # Build DataFrame (display without the internal _idx column)
+    # --- Inline confirmation UIs (shown at the top so they are hard to miss) ---
+    if st.session_state.confirm_delete and st.session_state.confirm_rec is not None:
+        rec = st.session_state.confirm_rec
+        with st.container(border=True):
+            st.warning(
+                f"Are you sure you want to delete this record **and its image**?\n\n"
+                f"- **submission_id**: {rec.get('submission_id','')}\n"
+                f"- **site**: {rec.get('site','')}\n"
+                f"- **date**: {rec.get('date','')}\n"
+                f"- **image**: {rec.get('summary_image','(none)')}"
+            )
+            c1, c2 = st.columns([1, 1])
+            if c1.button("✅ Yes, delete", type="primary", key="confirm_del_yes"):
+                ok, img_name = delete_record_and_image_by_index(rec["_idx"])
+                st.session_state.confirm_delete = False
+                st.session_state.confirm_rec = None
+                if ok:
+                    msg = "Record deleted."
+                    if img_name:
+                        msg += f" Image removed: {img_name}"
+                    st.success(msg)
+                else:
+                    st.error("Could not delete the selected record.")
+                st.rerun()
+            if c2.button("Cancel", key="confirm_del_no"):
+                st.session_state.confirm_delete = False
+                st.session_state.confirm_rec = None
+                st.rerun()
+
+    if st.session_state.confirm_delete_all:
+        with st.container(border=True):
+            st.warning("This will **delete ALL records and ALL summary images**. This cannot be undone.")
+            st.text_input("Type **DELETE** to confirm:", key="confirm_delete_all_text")
+            c1, c2 = st.columns([1, 1])
+            if c1.button("🗑️ Yes, delete EVERYTHING", type="primary", key="confirm_all_yes",
+                         disabled=(st.session_state.confirm_delete_all_text.strip().upper() != "DELETE")):
+                img_count = delete_all_records_and_images()
+                # Reset confirmation state
+                st.session_state.confirm_delete_all = False
+                st.session_state.confirm_delete_all_text = ""
+                st.success(f"All records deleted. Removed {img_count} image(s).")
+                st.rerun()
+            if c2.button("Cancel", key="confirm_all_no"):
+                st.session_state.confirm_delete_all = False
+                st.session_state.confirm_delete_all_text = ""
+                st.rerun()
+
+    # --- Table + downloads ---
     recs_with_idx = load_jsonl_with_index()
     if recs_with_idx:
         df_display = pd.DataFrame(recs_with_idx).drop(columns=["_idx"]).reindex(columns=COLUMNS)
         st.dataframe(df_display, use_container_width=True, height=320)
-
-        # Download CSV built in memory from JSONL (canonical column order)
         csv_bytes = df_display.to_csv(index=False).encode("utf-8")
         st.download_button("Download full CSV", data=csv_bytes, file_name=CSV_EXPORT_NAME)
     else:
         st.info("No records yet. Create a new entry first.")
 
+    # --- Manage a single record (now with confirmation) ---
     st.markdown("### Manage individual records")
     if recs_with_idx:
-        # Friendly selector label
         labels = [
             f"[{r['_idx']}] {r.get('submission_id','')} — {r.get('site','')} ({r.get('date','')})"
             for r in recs_with_idx
@@ -426,25 +482,21 @@ elif st.session_state.mode == "view":
         with st.expander("Preview selected record"):
             st.json({k: v for k, v in sel_rec.items() if k != "_idx"})
 
-        # Single button: delete record and its image
-        if st.button("🗑️ Delete record & image"):
-            ok, img_name = delete_record_and_image_by_index(sel_rec["_idx"])
-            if ok:
-                msg = "Record deleted."
-                if img_name:
-                    msg += f" Deleted image: {img_name}"
-                st.success(msg)
-            else:
-                st.error("Could not delete the selected record.")
+        # Instead of immediate delete, open confirmation
+        if st.button("🗑️ Delete record & image", key="open_confirm_single"):
+            st.session_state.confirm_delete = True
+            st.session_state.confirm_rec = sel_rec
             st.rerun()
     else:
         st.caption("No records to manage.")
 
     st.markdown("---")
     cols_bottom = st.columns(3)
-    if cols_bottom[0].button("🗑️ Delete ALL records & images"):
-        img_count = delete_all_records_and_images()
-        st.success(f"All records deleted. Removed {img_count} image(s).")
+
+    # Instead of immediate bulk delete, open confirmation
+    if cols_bottom[0].button("🗑️ Delete ALL records & images", key="open_confirm_all"):
+        st.session_state.confirm_delete_all = True
+        st.session_state.confirm_delete_all_text = ""
         st.rerun()
 
     if st.button("⬅ Back to home"):
