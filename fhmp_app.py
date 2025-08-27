@@ -88,8 +88,7 @@ def init_session():
         st.session_state.confirm_rec = None              # holds the selected record dict (with _idx)
     if "confirm_delete_all" not in st.session_state:
         st.session_state.confirm_delete_all = False      # bulk delete pending?
-    if "confirm_delete_all_text" not in st.session_state:
-        st.session_state.confirm_delete_all_text = ""    # user must type DELETE
+  
 
 
 def default_form():
@@ -440,22 +439,38 @@ elif st.session_state.mode == "view":
                 st.session_state.confirm_rec = None
                 st.rerun()
 
+    # Clean up any leftover input key when the confirm dialog is not active
+    if not st.session_state.confirm_delete_all and "confirm_delete_all_input" in st.session_state:
+        st.session_state.pop("confirm_delete_all_input", None)
+
     if st.session_state.confirm_delete_all:
         with st.container(border=True):
-            st.warning("This will **delete ALL records and ALL summary images**. This cannot be undone.")
-            st.text_input("Type **DELETE** to confirm:", key="confirm_delete_all_text")
+            st.warning(
+                "This will **delete ALL records and ALL summary images**. This cannot be undone."
+            )
+            st.text_input("Type **DELETE** to confirm:", key="confirm_delete_all_input")
+
+            ok_to_delete = (
+                st.session_state.get("confirm_delete_all_input", "").strip().upper() == "DELETE"
+            )
+
             c1, c2 = st.columns([1, 1])
-            if c1.button("🗑️ Yes, delete EVERYTHING", type="primary", key="confirm_all_yes",
-                         disabled=(st.session_state.confirm_delete_all_text.strip().upper() != "DELETE")):
+            if c1.button(
+                "🗑️ Yes, delete EVERYTHING",
+                type="primary",
+                key="confirm_all_yes",
+                disabled=not ok_to_delete,
+            ):
                 img_count = delete_all_records_and_images()
-                # Reset confirmation state
+                # IMPORTANT: don't write to the widget key here; just clear the flag and pop the input
                 st.session_state.confirm_delete_all = False
-                st.session_state.confirm_delete_all_text = ""
+                st.session_state.pop("confirm_delete_all_input", None)
                 st.success(f"All records deleted. Removed {img_count} image(s).")
                 st.rerun()
+
             if c2.button("Cancel", key="confirm_all_no"):
                 st.session_state.confirm_delete_all = False
-                st.session_state.confirm_delete_all_text = ""
+                st.session_state.pop("confirm_delete_all_input", None)
                 st.rerun()
 
     # --- Table + downloads ---
