@@ -566,9 +566,9 @@ elif st.session_state.mode == "new":
         for v in VEGETATION:
             form["vegetation"][v] = st.checkbox(v, value=form["vegetation"][v])
         if form["vegetation"]["Other"]:
-        form["vegetation_other"] = st.text_input(
-            "Other (Vegetation) — required when 'Other' is selected",
-            value=form["vegetation_other"]
+            form["vegetation_other"] = st.text_input(
+                "Other (Vegetation) — required when 'Other' is selected",
+                value=form["vegetation_other"]
         )
 
     elif step == 2:
@@ -576,11 +576,11 @@ elif st.session_state.mode == "new":
         for s in DOMINANT_SPECIES:
             form["dominant_species"][s] = st.checkbox(s, value=form["dominant_species"][s])
         
-if form["dominant_species"]["Other"]:
-        form["dominant_other"] = st.text_input(
-            "Other (Dominant species) — required when 'Other' is selected",
-            value=form["dominant_other"]
-        )
+        if form["dominant_species"]["Other"]:
+            form["dominant_other"] = st.text_input(
+                "Other (Dominant species) — required when 'Other' is selected",
+                value=form["dominant_other"]
+            )
 
 
     elif step == 3:
@@ -610,9 +610,9 @@ if form["dominant_species"]["Other"]:
         for a in ANIMAL_TYPES:
             form["animals"][a] = st.select_slider(a, options=[0, 1, 2, 3], value=form["animals"][a])
         if form["animals"]["Other feral"] > 0:
-        form["animals_other_text"] = st.text_input(
-            "Other feral (notes) — required when 'Other feral' > 0",
-            value=form["animals_other_text"]
+            form["animals_other_text"] = st.text_input(
+                "Other feral (notes) — required when 'Other feral' > 0",
+                value=form["animals_other_text"]
         )
 
     elif step == 8:
