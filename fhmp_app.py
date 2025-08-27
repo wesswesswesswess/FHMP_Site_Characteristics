@@ -386,6 +386,37 @@ def draw_summary_image(record_path, form):
 
     img.save(record_path)
     return record_path
+ 
+# ---------- Step validation (controls Next/Finish availability) ----------
+
+def validate_step(form, step) -> tuple[bool, list[str]]:
+    """
+    Returns (is_ok, messages) for the current step only.
+    We only validate what's on the screen, to keep UX simple.
+    """
+    errors = []
+
+    # Step 0: Details
+    if step == 0:
+        if not form["site"].strip():
+            errors.append("Enter a Site name/code to continue.")
+
+    # Step 1: Vegetation → Other requires text
+    if step == 1:
+        if form["vegetation"].get("Other") and not form.get("vegetation_other", "").strip():
+            errors.append("Provide text for Vegetation → Other.")
+
+    # Step 2: Dominant species → Other requires text
+    if step == 2:
+        if form["dominant_species"].get("Other") and not form.get("dominant_other", "").strip():
+            errors.append("Provide text for Dominant species → Other.")
+
+    # Step 7: Animals → if 'Other feral' > 0 requires notes
+    if step == 7:
+        if form["animals"].get("Other feral", 0) > 0 and not form.get("animals_other_text", "").strip():
+            errors.append("Provide notes for Animals → Other feral.")
+
+    return (len(errors) == 0, errors)
 
 # ---------- UI ----------
 init_session()
@@ -535,14 +566,22 @@ elif st.session_state.mode == "new":
         for v in VEGETATION:
             form["vegetation"][v] = st.checkbox(v, value=form["vegetation"][v])
         if form["vegetation"]["Other"]:
-            form["vegetation_other"] = st.text_input("Other (Vegetation)", value=form["vegetation_other"])
+        form["vegetation_other"] = st.text_input(
+            "Other (Vegetation) — required when 'Other' is selected",
+            value=form["vegetation_other"]
+        )
 
     elif step == 2:
         st.subheader("Dominant species")
         for s in DOMINANT_SPECIES:
             form["dominant_species"][s] = st.checkbox(s, value=form["dominant_species"][s])
-        if form["dominant_species"]["Other"]:
-            form["dominant_other"] = st.text_input("Other (Dominant species)", value=form["dominant_other"])
+        
+if form["dominant_species"]["Other"]:
+        form["dominant_other"] = st.text_input(
+            "Other (Dominant species) — required when 'Other' is selected",
+            value=form["dominant_other"]
+        )
+
 
     elif step == 3:
         st.subheader("Landform")
@@ -571,7 +610,10 @@ elif st.session_state.mode == "new":
         for a in ANIMAL_TYPES:
             form["animals"][a] = st.select_slider(a, options=[0, 1, 2, 3], value=form["animals"][a])
         if form["animals"]["Other feral"] > 0:
-            form["animals_other_text"] = st.text_input("Other feral (notes)", value=form["animals_other_text"])
+        form["animals_other_text"] = st.text_input(
+            "Other feral (notes) — required when 'Other feral' > 0",
+            value=form["animals_other_text"]
+        )
 
     elif step == 8:
         st.subheader("Other comments")
@@ -596,11 +638,16 @@ elif st.session_state.mode == "new":
             reset_to_splash()
             st.rerun()
 
-    # ---- navigation ----
-    
+        # ---- navigation ----
     if step <= LAST_FORM_STEP:
         st.markdown("---")
         cols = st.columns(3)
+
+        # Validate current step
+        is_ok, messages = validate_step(form, step)
+        if not is_ok:
+            for m in messages:
+                st.warning(m)
 
         # Back: on step 0 return to splash; otherwise step-1
         if cols[0].button("⬅ Back"):
@@ -612,28 +659,25 @@ elif st.session_state.mode == "new":
 
         # Next / Finish
         if step < LAST_FORM_STEP:
-            next_disabled = (step == 0 and not form["site"].strip())
-            if cols[2].button("Next ➡", disabled=next_disabled):
+            if cols[2].button("Next ➡", disabled=not is_ok):
                 st.session_state.step = step + 1
                 st.rerun()
         else:
             # Finish at LAST_FORM_STEP
-            if cols[2].button("✅ Finish & Export"):
-                # ✅ Make sure we CALL the function:
+            if cols[2].button("✅ Finish & Export", disabled=not is_ok):
                 record = collect_export_record(form)
 
-                # Safety guard: validate shape
+                # Safety guard (unchanged)
                 if not isinstance(record, dict) or "submission_id" not in record:
                     st.error("Internal error: export record not formed as expected.")
                     st.caption(f"type(record)={type(record)}; keys={list(record.keys()) if isinstance(record, dict) else 'n/a'}")
                     st.stop()
 
-                image_name = f"{record['submission_id']}.png"
+                image_name = f"{record['submission_id']}.png}"
                 image_path = os.path.join(SUMMARY_DIR, image_name)
                 draw_summary_image(image_path, form)
                 record["summary_image"] = image_name
 
-                # Append to JSONL
                 write_jsonl_record(record)
 
                 # Store export data for confirmation screen
@@ -644,4 +688,3 @@ elif st.session_state.mode == "new":
 
                 st.session_state.step = EXPORT_STEP
                 st.rerun()
-    
