@@ -179,48 +179,97 @@ def load_jsonl_with_index(path=JSONL_PATH):
     return out
 
 
-def delete_jsonl_by_index(target_idx: int, path=JSONL_PATH):
+# ---------- Single-record + image delete helpers ----------
+
+def load_jsonl_with_index(path=JSONL_PATH):
     """
-    Remove a single line from the JSONL file by its zero-based line index.
-    Does an atomic replace to avoid partial writes.
+    Read JSONL and return a list of dicts where each dict includes '_idx'
+    with the original zero-based line index in the log.
     """
+    out = []
     if not os.path.exists(path):
-        return
-    tmp_path = path + ".tmp"
-    with open(path, "r", encoding="utf-8", errors="replace") as src, \
-         open(tmp_path, "w", encoding="utf-8") as dst:
-        for i, line in enumerate(src):
-            if i == target_idx:
-                # skip the target line (delete it)
+        return out
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for i, line in enumerate(f):
+            line = line.strip()
+            if not line:
                 continue
-            dst.write(line)
-    os.replace(tmp_path, path)
+            try:
+                rec = json.loads(line)
+                rec["_idx"] = i
+                out.append(rec)
+            except Exception:
+                # Skip malformed line silently
+                pass
+    return out
 
 
-def delete_summary_image(image_name: str, base_dir=SUMMARY_DIR):
+def delete_record_and_image_by_index(target_idx: int,
+                                     jsonl_path=JSONL_PATH,
+                                     img_dir=SUMMARY_DIR):
     """
-    Delete a single PNG by file name if it exists.
+    Atomically remove a single JSONL line by its index, and delete its
+    referenced summary image (if any). Returns (success: bool, image_name: str|None).
     """
-    if not image_name:
-        return
-    path = os.path.join(base_dir, image_name)
-    if os.path.exists(path):
+    if not os.path.exists(jsonl_path):
+        return False, None
+
+    # Read all lines first so we can parse the one we’ll delete
+    with open(jsonl_path, "r", encoding="utf-8", errors="replace") as src:
+        lines = src.readlines()
+
+    if target_idx < 0 or target_idx >= len(lines):
+        return False, None
+
+    img_to_delete = None
+    try:
+        target_obj = json.loads(lines[target_idx])
+        img_to_delete = target_obj.get("summary_image") or None
+    except Exception:
+        # Even if the line is malformed JSON, we still remove it
+        pass
+
+    # Rewrite file without the target line
+    tmp_path = jsonl_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as dst:
+        for i, line in enumerate(lines):
+            if i != target_idx:
+                dst.write(line)
+    os.replace(tmp_path, jsonl_path)
+
+    # Delete the associated image (best-effort)
+    if img_to_delete:
+        img_path = os.path.join(img_dir, img_to_delete)
         try:
-            os.remove(path)
+            os.remove(img_path)
+        except FileNotFoundError:
+            pass
         except Exception:
             pass
 
+    return True, img_to_delete
 
-def referenced_image_names():
+
+def delete_all_records_and_images(jsonl_path=JSONL_PATH, img_dir=SUMMARY_DIR):
     """
-    Set of image file names referenced by records in the JSONL log.
+    Hard-delete ALL records and ALL .png summary images.
+    Returns count of images deleted.
     """
-    names = set()
-    for r in read_jsonl_records():
-        img = r.get("summary_image", "")
-        if img:
-            names.add(img)
-    return names
+    # Clear JSONL
+    if os.path.exists(jsonl_path):
+        open(jsonl_path, "w").close()
+
+    # Remove all PNGs
+    deleted = 0
+    if os.path.isdir(img_dir):
+        for name in os.listdir(img_dir):
+            if name.lower().endswith(".png"):
+                try:
+                    os.remove(os.path.join(img_dir, name))
+                    deleted += 1
+                except Exception:
+                    pass
+    return deleted
 
     return {
         "submission_id": submission_id,
@@ -349,10 +398,9 @@ if st.session_state.mode == "splash":
 elif st.session_state.mode == "view":
     st.subheader("Previous records")
 
-    # Build DataFrame from JSONL for display/download
+    # Build DataFrame (display without the internal _idx column)
     recs_with_idx = load_jsonl_with_index()
     if recs_with_idx:
-        # Display without the internal _idx column
         df_display = pd.DataFrame(recs_with_idx).drop(columns=["_idx"]).reindex(columns=COLUMNS)
         st.dataframe(df_display, use_container_width=True, height=320)
 
@@ -362,79 +410,41 @@ elif st.session_state.mode == "view":
     else:
         st.info("No records yet. Create a new entry first.")
 
-    # --- Manage individual records ---
     st.markdown("### Manage individual records")
     if recs_with_idx:
-        # Build labels -> record mapping for a friendly selector
-        options = {}
-        for r in recs_with_idx:
-            label = f"[{r['_idx']}] {r.get('submission_id','')} — {r.get('site','')} ({r.get('date','')})"
-            options[label] = r
-
-        sel_label = st.selectbox("Select a record to view/delete", list(options.keys()))
-        sel_rec = options[sel_label]
+        # Friendly selector label
+        labels = [
+            f"[{r['_idx']}] {r.get('submission_id','')} — {r.get('site','')} ({r.get('date','')})"
+            for r in recs_with_idx
+        ]
+        label_to_rec = {lab: r for lab, r in zip(labels, recs_with_idx)}
+        sel_label = st.selectbox("Select a record", labels)
+        sel_rec = label_to_rec[sel_label]
 
         with st.expander("Preview selected record"):
             st.json({k: v for k, v in sel_rec.items() if k != "_idx"})
 
-        cols = st.columns([1, 1, 4])
-        with cols[0]:
-            if st.button("🗑️ Delete record"):
-                # Delete JSONL line
-                delete_jsonl_by_index(sel_rec["_idx"])
-                st.success("Record deleted.")
-                st.rerun()
-        with cols[1]:
-            img_name = sel_rec.get("summary_image", "")
-            disabled = not bool(img_name)
-            if st.button("🗑️ Delete its image", disabled=disabled):
-                delete_summary_image(img_name)
-                st.success(f"Image '{img_name}' deleted.")
-                st.rerun()
+        # Single button: delete record and its image
+        if st.button("🗑️ Delete record & image"):
+            ok, img_name = delete_record_and_image_by_index(sel_rec["_idx"])
+            if ok:
+                msg = "Record deleted."
+                if img_name:
+                    msg += f" Deleted image: {img_name}"
+                st.success(msg)
+            else:
+                st.error("Could not delete the selected record.")
+            st.rerun()
     else:
         st.caption("No records to manage.")
 
     st.markdown("---")
-
-    # --- Image management ---
-    st.subheader("Saved summary images")
-    images = [f for f in os.listdir(SUMMARY_DIR) if f.lower().endswith(".png")]
-    if not images:
-        st.info("No summary images yet.")
-    else:
-        # Single-image delete UI
-        img_select = st.selectbox("Select an image to delete", ["— Select —"] + sorted(images))
-        del_cols = st.columns([1, 1, 4])
-        with del_cols[0]:
-            if st.button("🗑️ Delete selected image", disabled=(img_select == "— Select —")):
-                delete_summary_image(img_select)
-                st.success(f"Image '{img_select}' deleted.")
-                st.rerun()
-
-        # Orphan cleanup UI (delete PNGs not referenced by any record)
-        ref = referenced_image_names()
-        orphan = sorted([name for name in images if name not in ref])
-        with del_cols[1]:
-            if st.button(f"🧹 Clean up orphaned images ({len(orphan)})", disabled=(len(orphan) == 0)):
-                for name in orphan:
-                    delete_summary_image(name)
-                st.success(f"Deleted {len(orphan)} orphaned image(s).")
-                st.rerun()
-
-        # Optional: show images with expanders
-        for name in sorted(images, reverse=True):
-            path = os.path.join(SUMMARY_DIR, name)
-            with st.expander(name):
-                st.image(path)
-                with open(path, "rb") as f:
-                    st.download_button("Download image", data=f, file_name=name)
-
-    st.markdown("---")
     cols_bottom = st.columns(3)
-    if cols_bottom[0].button("🗑️ Delete ALL records"):
-        open(JSONL_PATH, "w").close()
-        st.success("All JSONL records deleted.")
+    if cols_bottom[0].button("🗑️ Delete ALL records & images"):
+        img_count = delete_all_records_and_images()
+        st.success(f"All records deleted. Removed {img_count} image(s).")
         st.rerun()
+
     if st.button("⬅ Back to home"):
         reset_to_splash()
         st.rerun()
