@@ -528,6 +528,7 @@ elif st.session_state.mode == "new":
             st.rerun()
 
     # ---- navigation ----
+    
     if step <= LAST_FORM_STEP:
         st.markdown("---")
         cols = st.columns(3)
@@ -549,7 +550,15 @@ elif st.session_state.mode == "new":
         else:
             # Finish at LAST_FORM_STEP
             if cols[2].button("✅ Finish & Export"):
+                # ✅ Make sure we CALL the function:
                 record = collect_export_record(form)
+
+                # Safety guard: validate shape
+                if not isinstance(record, dict) or "submission_id" not in record:
+                    st.error("Internal error: export record not formed as expected.")
+                    st.caption(f"type(record)={type(record)}; keys={list(record.keys()) if isinstance(record, dict) else 'n/a'}")
+                    st.stop()
+
                 image_name = f"{record['submission_id']}.png"
                 image_path = os.path.join(SUMMARY_DIR, image_name)
                 draw_summary_image(image_path, form)
@@ -566,3 +575,4 @@ elif st.session_state.mode == "new":
 
                 st.session_state.step = EXPORT_STEP
                 st.rerun()
+    
