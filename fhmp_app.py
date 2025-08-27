@@ -139,19 +139,7 @@ def df_from_jsonl(columns=COLUMNS):
     df = pd.DataFrame(recs)
     return df.reindex(columns=columns)
 
-def collect_export_record(form):
-    safe_site = re.sub(r'\W+', '_', form["site"]).strip("_")
-    submission_id = f"{form['date'].replace('-', '')}_{safe_site}"
 
-    veg = [k for k, v in form["vegetation"].items() if v and k != "Other"]
-    if form["vegetation"].get("Other") and form["vegetation_other"].strip():
-        veg.append(f"Other:{form['vegetation_other'].strip()}")
-
-    dom = [k for k, v in form["dominant_species"].items() if v and k != "Other"]
-    if form["dominant_species"].get("Other") and form["dominant_other"].strip():
-        dom.append(f"Other:{form['dominant_other'].strip()}")
-
-    landform = [k for k, v in form["landform"].items() if v]
     
 # ---------- Single-record delete helpers ----------
 
@@ -270,6 +258,20 @@ def delete_all_records_and_images(jsonl_path=JSONL_PATH, img_dir=SUMMARY_DIR):
                 except Exception:
                     pass
     return deleted
+    
+def collect_export_record(form):
+    safe_site = re.sub(r'\W+', '_', form["site"]).strip("_")
+    submission_id = f"{form['date'].replace('-', '')}_{safe_site}"
+
+    veg = [k for k, v in form["vegetation"].items() if v and k != "Other"]
+    if form["vegetation"].get("Other") and form["vegetation_other"].strip():
+        veg.append(f"Other:{form['vegetation_other'].strip()}")
+
+    dom = [k for k, v in form["dominant_species"].items() if v and k != "Other"]
+    if form["dominant_species"].get("Other") and form["dominant_other"].strip():
+        dom.append(f"Other:{form['dominant_other'].strip()}")
+
+    landform = [k for k, v in form["landform"].items() if v]
 
     return {
         "submission_id": submission_id,
