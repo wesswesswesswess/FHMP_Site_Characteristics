@@ -673,7 +673,7 @@ elif st.session_state.mode == "new":
                     st.caption(f"type(record)={type(record)}; keys={list(record.keys()) if isinstance(record, dict) else 'n/a'}")
                     st.stop()
 
-                image_name = f"{record['submission_id']}.png}"
+                image_name = f"{record['submission_id']}.png"
                 image_path = os.path.join(SUMMARY_DIR, image_name)
                 draw_summary_image(image_path, form)
                 record["summary_image"] = image_name
